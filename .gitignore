@@ -1,0 +1,8 @@
+*.Rda
+*.RData
+*.Rds
+*.rds
+
+*.pdf
+
+*~
