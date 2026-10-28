@@ -106,3 +106,27 @@ run_maps_step <- function(spec, maps = NULL, summaries = names(year_summaries)) 
   msg(length(specs), "maps written to", out_dir)
   invisible(files)
 }
+
+# Smoothed dev_expl (see R/smooth.R): fit and save to
+# output/<region>/<tag>/smooth/, where make_maps users and the Shiny app pick
+# it up.  Useful for large k, which can take hours.
+#
+# years : years to average dev_expl over (NULL = all years of the run)
+run_smooth_step <- function(spec, k = 500, family = "gaussian", years = NULL,
+                            engine = "gam", refit = FALSE) {
+  run <- load_run(spec$region, spec$tag, with_gold = FALSE)
+  check_meta(run$meta, spec, "changepoints.Rda")
+  if (is.null(years)) years <- run$years
+  msg("smoothing dev_expl:", spec$tag, "| family", family, "| k", k,
+      "| years", smooth_years_label(years))
+  sm <- fit_or_load_smooth(run, k = k, family = family, years = years,
+                           engine = engine, refit = refit)
+  if (sm$source == "loaded") {
+    msg("already saved (use refit = TRUE / --refit=1 to refit):",
+        smooth_file(spec$region, spec$tag, family, k, years, engine))
+  } else {
+    msg(sprintf("fitted in %.0f s, edf %.0f; saved %s", sm$seconds, sm$edf,
+                smooth_file(spec$region, spec$tag, family, k, years, engine)))
+  }
+  invisible(sm)
+}

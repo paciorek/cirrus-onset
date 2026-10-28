@@ -37,12 +37,37 @@ nc_clean_missing <- function(x, nc, var_name) {
   x
 }
 
+# How to get a region's data, for error messages.
+data_download_hint <- function(cfg) {
+  name <- if (!is.null(cfg$data_name)) cfg$data_name else cfg$label
+  sprintf(paste0("Download the %s data (yearly NetCDF files named like %s) ",
+                 "to %s (relative to %s)."),
+          name, sub("%d", "YYYY", cfg$file_fmt, fixed = TRUE), cfg$data_dir,
+          base_dir())
+}
+
+# Plain region name for messages (the label may contain non-ASCII characters,
+# which print badly in a non-UTF-8 locale).
+region_name <- function(cfg) {
+  if (!is.null(cfg$key)) tools::toTitleCase(cfg$key) else cfg$label
+}
+
+# Message for when a region has no data files at all.
+no_data_message <- function(cfg) {
+  sprintf("No %s data files found in %s.\n%s", region_name(cfg),
+          resolve_path(cfg$data_dir), data_download_hint(cfg))
+}
+
 region_files <- function(cfg, years) {
-  files <- file.path(resolve_path(cfg$data_dir), sprintf(cfg$file_fmt, years))
+  data_dir <- resolve_path(cfg$data_dir)
+  files <- file.path(data_dir, sprintf(cfg$file_fmt, years))
   missing <- years[!file.exists(files)]
+  if (length(missing) == length(years))
+    stop(no_data_message(cfg), call. = FALSE)
   if (length(missing))
-    stop("Missing data files for years: ", paste(missing, collapse = ", "),
-         " (looked in ", resolve_path(cfg$data_dir), ")", call. = FALSE)
+    stop("Missing ", region_name(cfg), " data files for years: ",
+         paste(missing, collapse = ", "), " (looked in ", data_dir, ").\n",
+         data_download_hint(cfg), call. = FALSE)
   files
 }
 
@@ -52,12 +77,11 @@ region_files <- function(cfg, years) {
 # partial current year) are dropped with a message.
 data_years <- function(cfg, doy_end = NULL, verbose = TRUE) {
   data_dir <- resolve_path(cfg$data_dir)
-  if (!dir.exists(data_dir)) stop("Data folder not found: ", data_dir, call. = FALSE)
+  if (!dir.exists(data_dir)) stop(no_data_message(cfg), call. = FALSE)
   esc   <- gsub("([.|()\\^{}+$*?\\[\\]\\\\])", "\\\\\\1", cfg$file_fmt, perl = TRUE)
   regex <- paste0("^", sub("%d", "([0-9]{4})", esc, fixed = TRUE), "$")
   files <- list.files(data_dir, pattern = regex)
-  if (!length(files))
-    stop("No files matching '", cfg$file_fmt, "' in ", data_dir, call. = FALSE)
+  if (!length(files)) stop(no_data_message(cfg), call. = FALSE)
   years <- sort(as.integer(sub(regex, "\\1", files)))
 
   if (!is.null(doy_end)) {

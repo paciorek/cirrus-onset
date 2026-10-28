@@ -10,6 +10,8 @@
 # Fields:
 #   label          display name
 #   data_dir       folder with one NetCDF file per year
+#   data_name      name of the data set, used in the message telling users
+#                  to download it when the files are missing
 #   file_fmt       sprintf format giving a year's file name
 #   var_name       precipitation variable in the NetCDF files
 #   dim_names      names of the lon, lat and time dimensions in the files
@@ -25,8 +27,9 @@
 #                               day of year is computed per year, so Feb 29
 #                               is handled correctly
 #                    label      display name
-#                    overlay    TRUE for the (one) dataset drawn as a vertical
-#                               bar in the Shiny time series
+#                    overlay    TRUE for the dataset shown by default as a
+#                               vertical line in the Shiny time series (the
+#                               user can switch to any other dataset)
 #   zlim           optional colour-limit overrides for maps.  Each override is
 #                  list(<map name> = list(mean = c(lo, hi), sd = c(lo, hi)));
 #                  give only the panels you want to change (NULL = automatic).
@@ -56,6 +59,7 @@ regions <- list(
   india = list(
     label       = "India (IMD 0.25\u00b0)",
     data_dir    = "data/india_onset/IMD_25by25",
+    data_name   = "IMD25x25",
     file_fmt    = "data_%d.nc",
     var_name    = "RAINFALL",
     dim_names   = c(lon = "LONGITUDE", lat = "LATITUDE", time = "TIME"),
@@ -63,21 +67,21 @@ regions <- list(
     shapefile   = NULL,
     gold_standard = list(
       o2_any = list(
-        file      = "data/O2_onset_full_timeseries_025x025_withoutMOK.nc4",
+        file      = "data/india_onset/O2_onset_full_timeseries_025x025_withoutMOK.nc4",
         var_name  = "O2_onset",
         dim_names = c(lon = "lon", lat = "lat", year = "year"),
         direction = "onset",
         origin    = "04-01",
-        label     = "O2 onset (unrestricted)",
+        label     = "O2 (unrestricted)",
         overlay   = TRUE
       ),
       o2_postMOK = list(
-        file      = "data/O2_onset_full_timeseries_025x025.nc4",
+        file      = "data/india_onset/O2_onset_full_timeseries_025x025.nc4",
         var_name  = "O2_onset",
         dim_names = c(lon = "lon", lat = "lat", year = "year"),
         direction = "onset",
         origin    = "04-01",
-        label     = "O2 onset (post MOK)",
+        label     = "O2 (restricted by MOK)",
         overlay   = FALSE
       )
     ),
@@ -96,6 +100,7 @@ regions <- list(
   ethiopia = list(
     label       = "Ethiopia (CHIRPS 0.25\u00b0)",
     data_dir    = "data/ethiopia_onset/CHIRPS_IMERG",
+    data_name   = "CHIRPS",
     file_fmt    = "%d.nc",
     var_name    = "RAINFALL",
     dim_names   = c(lon = "LONGITUDE", lat = "LATITUDE", time = "TIME"),

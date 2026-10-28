@@ -55,6 +55,24 @@ region_overlay <- function(cfg) {
 }
 
 
+# Smoothed dev_expl fits, shared by all sessions of this app process and kept
+# for the life of the process.  Keyed by run, family, k and years; holds the
+# fitted model (when fitted here) and the fitted values.  At most
+# smooth_cache_max fits are kept in memory; fits are also saved to disk by
+# fit_or_load_smooth(), so evicted or earlier fits reload quickly.
+smooth_cache <- new.env()
+smooth_cache_order <- character(0)
+smooth_cache_max <- 6
+smooth_cache_put <- function(id, sm) {
+  assign(id, sm, envir = smooth_cache)
+  smooth_cache_order <<- c(setdiff(smooth_cache_order, id), id)
+  while (length(smooth_cache_order) > smooth_cache_max) {
+    rm(list = smooth_cache_order[1], envir = smooth_cache)
+    smooth_cache_order <<- smooth_cache_order[-1]
+  }
+}
+
+
 # -- UI ----------------------------------------------------------------------
 
 ui <- fluidPage(
@@ -88,23 +106,70 @@ ui <- fluidPage(
         column(4, div(style = "margin-top: 25px;",
                       actionButton("go_latlon", "Go to lat/lon")))
       ),
-      div(class = "help-note", textOutput("data_status")),
-      hr(),
-      fluidRow(
-        column(4, numericInput("y_max", "Y-axis max (mm)", value = 50,
-                               min = 1, step = 10)),
-        column(4, checkboxInput("free_y", "Free y-axis", value = FALSE)),
-        column(4, uiOutput("gold_ui"))
-      ),
-      downloadButton("download_ts", "Download time-series PDF")
+      uiOutput("data_status_ui"),
+      wellPanel(
+        style = "padding: 8px 12px; margin-top: 12px;",
+        strong("Mean dev_expl: smoothing and region mask"),
+        div(class = "help-note",
+            "Yearly dev_expl is averaged over the displayed years at each cell, ",
+            "and that field is smoothed with s(lon, lat, k). Show it with the map ",
+            "statistic 'Smoothed mean dev_expl' (above), or use it to mask the map."),
+        fluidRow(
+          column(4, numericInput("smooth_k", "k (basis size)", value = 500,
+                                 min = 10, step = 50)),
+          column(4, selectInput("smooth_family", "GAM family",
+                                choices = names(smooth_families),
+                                selected = "gaussian")),
+          column(4, div(style = "margin-top: 25px;",
+                        actionButton("fit_smooth", "Fit smooth")))
+        ),
+        div(class = "help-note", textOutput("smooth_status")),
+        checkboxInput("thresh_on", "Mask cells with low mean dev_expl",
+                      value = FALSE),
+        conditionalPanel(
+          "input.thresh_on",
+          fluidRow(
+            column(6, radioButtons("thresh_src", "Threshold applied to",
+                                   choices = c("Smoothed" = "smooth",
+                                               "Raw" = "raw"),
+                                   selected = "smooth", inline = TRUE)),
+            column(6, numericInput("thresh", "Threshold",
+                                   value = 0.3, min = 0, max = 1, step = 0.05))
+          ),
+          div(class = "help-note", textOutput("mask_status")),
+          div(style = "margin-top: 6px;",
+              actionButton("save_mask", "Save mask"),
+              downloadButton("download_mask", "Download mask (CSV)"))
+        )
+      )
     ),
     mainPanel(
       width = 7,
       plotOutput("ts", height = "820px"),
-      div(class = "help-note", textOutput("ts_legend"))
+      div(class = "help-note", textOutput("ts_legend")),
+      hr(),
+      fluidRow(
+        column(3, numericInput("y_max", "Y-axis max (mm)", value = 50,
+                               min = 1, step = 10)),
+        column(2, div(style = "margin-top: 25px;",
+                      checkboxInput("free_y", "Free y-axis", value = FALSE))),
+        column(4, uiOutput("gold_ui")),
+        column(3, div(style = "margin-top: 25px;",
+                      downloadButton("download_ts", "Download time-series PDF")))
+      )
     )
   )
 )
+
+
+# Map statistic menu: the run's map specs plus the smoothed mean dev_expl
+# (a single field, not a per-year array), placed after dev_expl.
+map_menu_choices <- function(menu) {
+  ch <- setNames(names(menu), vapply(menu, `[[`, "", "label"))
+  i  <- match("dev_expl", ch)
+  sm <- c("Smoothed mean dev_expl (see settings below)" = "dev_expl_smooth")
+  if (is.na(i)) c(ch, sm) else c(ch[seq_len(i)], sm, ch[-seq_len(i)])
+}
 
 
 # -- Server ------------------------------------------------------------------
@@ -124,9 +189,14 @@ server <- function(input, output, session) {
     # Gold standard dataset to overlay on the time series (if any)
     gs <- gold_standards_for(cfg, dir)
     ov <- names(Filter(function(e) isTRUE(e$overlay), gs))
-    r$gold_overlay <- if (length(ov) && paste0("gold_", ov[1]) %in% names(r$r))
-      paste0("gold_", ov[1]) else NULL
-    r$gold_label <- if (!is.null(r$gold_overlay)) gs[[ov[1]]]$label else NULL
+    # Gold standard datasets available for the time-series line: a named
+    # vector label -> array name, and the default (overlay = TRUE, else first)
+    avail <- names(gs)[paste0("gold_", names(gs)) %in% names(r$r)]
+    r$gold_choices <- if (length(avail))
+      setNames(paste0("gold_", avail), vapply(gs[avail], `[[`, "", "label")) else
+      character(0)
+    r$gold_default <- if (length(intersect(ov, avail)))
+      paste0("gold_", intersect(ov, avail)[1]) else unname(r$gold_choices[1])
 
     r$menu    <- specs_for_run(r$r, cfg, dir, r$meta$doy_start, r$meta$doy_end)
     r$n_show  <- min(cfg$shiny$n_years_show, length(r$years))
@@ -150,11 +220,9 @@ server <- function(input, output, session) {
     updateNumericInput(session, "start_year",
                        label = sprintf("Start year (%d-%d)", r$start_min, r$start_max),
                        value = start, min = r$start_min, max = r$start_max)
-    sel <- if (isolate(input$map_stat) %in% names(r$menu)) isolate(input$map_stat) else "chpt"
-    updateSelectInput(session, "map_stat",
-                      choices = setNames(names(r$menu),
-                                         vapply(r$menu, `[[`, "", "label")),
-                      selected = sel)
+    choices <- map_menu_choices(r$menu)
+    sel <- if (isolate(input$map_stat) %in% choices) isolate(input$map_stat) else "chpt"
+    updateSelectInput(session, "map_stat", choices = choices, selected = sel)
     c0 <- nearest_cell(cfg$shiny$default_lon, cfg$shiny$default_lat,
                        r$lon, r$lat, valid = r$land)
     cell(c0)
@@ -166,17 +234,36 @@ server <- function(input, output, session) {
 
   output$gold_ui <- renderUI({
     r <- run()
-    if (is.null(r$gold_overlay)) return(NULL)
-    checkboxInput("show_gold", paste("Show", r$gold_label), value = TRUE)
+    if (!length(r$gold_choices)) return(NULL)
+    radioButtons("gold_sel", "Gold standard line",
+                 choices = c("None" = "none", r$gold_choices),
+                 selected = r$gold_default)
+  })
+
+  # The selected gold standard array name, or NULL
+  gold_sel <- reactive({
+    r <- run()
+    g <- input$gold_sel
+    if (is.null(g) || !g %in% r$gold_choices) NULL else g
+  })
+
+  output$data_status_ui <- renderUI({
+    r <- run()
+    missing <- length(r$data_years) < length(r$years)
+    div(class = "help-note",
+        style = if (missing) "color: #b00020; white-space: pre-line;" else NULL,
+        textOutput("data_status"))
   })
 
   output$data_status <- renderText({
     r <- run()
     dd <- resolve_path(r$cfg$data_dir)
-    if (length(r$data_years))
-      sprintf("Precip data: %s (%d of %d years present)", dd,
-              length(r$data_years), length(r$years)) else
-      sprintf("Precip data: no yearly files found in %s", dd)
+    if (!length(r$data_years)) return(no_data_message(r$cfg))
+    msg <- sprintf("Precip data: %s (%d of %d years present)", dd,
+                   length(r$data_years), length(r$years))
+    if (length(r$data_years) < length(r$years))
+      msg <- paste(msg, data_download_hint(r$cfg))
+    msg
   })
 
   # Start year: debounced so typing "19.." doesn't trigger intermediate
@@ -240,9 +327,143 @@ server <- function(input, output, session) {
     }
   }
 
+  # -- dev_expl threshold mask (raw or smoothed) --
+  # Mean dev_expl over the displayed years, per cell.
+  raw_dev_mean <- reactive(mean_dev_expl(run()$r$dev_expl, run()$years,
+                                         years_sel()))
+
+  # Settings that identify a smooth; debounced so typing k doesn't trigger
+  # lookups for intermediate values.
+  smooth_key <- debounce(reactive({
+    r <- run()
+    k <- suppressWarnings(as.integer(input$smooth_k))
+    req(length(k) == 1, !is.na(k), k >= 10, input$smooth_family)
+    yrs <- years_sel()
+    list(id = paste(r$meta$tag, input$smooth_family, k,
+                    smooth_years_label(yrs), sep = "|"),
+         k = k, family = input$smooth_family, years = yrs)
+  }), 600)
+
+  # The id of the smooth the user asked to fit (via the button)
+  fit_request <- reactiveVal(NULL)
+  observeEvent(input$fit_smooth, fit_request(smooth_key()$id))
+  smooth_error <- reactiveVal(NULL)
+
+  # The smooth for the current settings: from the in-memory cache, else from
+  # disk, else fitted -- but only once "Fit smooth" has been pressed for these
+  # settings.  NULL if not available yet.  Changing the map statistic, the
+  # summary or the threshold does not touch this.
+  smooth_fit <- reactive({
+    key <- smooth_key()
+    if (exists(key$id, envir = smooth_cache, inherits = FALSE))
+      return(get(key$id, envir = smooth_cache))
+    r <- run()
+    do_fit <- identical(fit_request(), key$id)
+    sm <- tryCatch({
+      if (do_fit) {
+        withProgress(
+          message = sprintf("Fitting smooth (%s, k = %d)...", key$family, key$k),
+          detail = "large k or non-gaussian families can take minutes",
+          fit_or_load_smooth(r, k = key$k, family = key$family, years = key$years))
+      } else {
+        fit_or_load_smooth(r, k = key$k, family = key$family, years = key$years,
+                           fit = FALSE)
+      }
+    }, error = function(e) {
+      # Remember the error for these settings and don't retry automatically
+      smooth_error(list(id = key$id, msg = conditionMessage(e)))
+      fit_request(NULL)
+      NULL
+    })
+    if (!is.null(sm)) smooth_cache_put(key$id, sm)
+    sm
+  })
+
+  output$smooth_status <- renderText({
+    key <- smooth_key()
+    sm  <- smooth_fit()
+    yrs <- years_sel()
+    err <- smooth_error()
+    if (!is.null(err) && identical(err$id, key$id) && is.null(sm))
+      return(paste("Smoothing failed:", err$msg))
+    if (is.null(sm))
+      return(sprintf(paste0("No smooth yet for %s, k = %d, years %d-%d: press ",
+                            "'Fit smooth' (or precompute with ",
+                            "scripts/smooth_dev_expl.R)."),
+                     key$family, key$k, min(yrs), max(yrs)))
+    sprintf("Smooth: %s, k = %d, edf %.0f, years %d-%d (%s).",
+            sm$family, sm$k, sm$edf, min(yrs), max(yrs),
+            if (identical(sm$source, "loaded")) "loaded from saved fit" else
+              sprintf("fitted in %.0f s", sm$seconds))
+  })
+
+  # The region mask (see make_region_mask()), or NULL for no masking.
+  region_mask <- reactive({
+    if (!isTRUE(input$thresh_on)) return(NULL)
+    thr <- input$thresh
+    req(is.numeric(thr), !is.na(thr))
+    r <- run()
+    if (input$thresh_src == "raw")
+      return(make_region_mask(r, thr, source = "raw", years = years_sel()))
+    sm <- smooth_fit()
+    if (is.null(sm)) return(NULL)
+    make_region_mask(r, thr, source = "smooth", years = years_sel(), smooth = sm)
+  })
+  dev_mask <- reactive({
+    m <- region_mask()
+    if (is.null(m)) NULL else m$keep
+  })
+
+  output$mask_status <- renderText({
+    req(isTRUE(input$thresh_on))
+    m <- region_mask()
+    if (is.null(m))
+      return("Fit a smooth (above) to mask on smoothed values. Map not masked.")
+    sprintf("%s mean dev_expl >= %g: %d of %d cells kept.",
+            if (m$source == "raw") "Raw" else "Smoothed", m$threshold,
+            sum(m$keep), sum(!is.na(m$values)))
+  })
+
+  observeEvent(input$save_mask, {
+    m <- region_mask()
+    if (is.null(m)) {
+      showNotification("No mask to save yet.", type = "warning")
+      return()
+    }
+    f <- tryCatch(save_region_mask(m), error = function(e) e)
+    if (inherits(f, "error"))
+      showNotification(paste("Could not save mask:", conditionMessage(f)),
+                       type = "error")
+    else
+      showNotification(paste("Mask saved to", f), duration = 10)
+  })
+
+  output$download_mask <- downloadHandler(
+    filename = function() {
+      m <- region_mask()
+      if (is.null(m)) "mask.csv" else
+        sub("\\.rds$", ".csv", basename(region_mask_file(m)))
+    },
+    content = function(file) {
+      m <- region_mask()
+      validate(need(!is.null(m), "No mask to download yet."))
+      write.csv(mask_cells(m), file, row.names = FALSE)
+    }
+  )
+
   # -- Map --
   map_field <- reactive({
     r <- run()
+    if (identical(input$map_stat, "dev_expl_smooth")) {
+      sm <- smooth_fit()
+      validate(need(!is.null(sm), paste(
+        "No smoothed dev_expl for these settings and years yet:",
+        "press 'Fit smooth' (below the location and y-axis controls).")))
+      return(list(z = sm$fitted, zlim = r$menu$dev_expl$zlim$mean,
+                  label = sprintf("Smoothed mean dev_expl (%s, k = %d)",
+                                  sm$family, sm$k),
+                  single = TRUE))
+    }
     req(input$map_stat %in% names(r$menu))
     s <- r$menu[[input$map_stat]]
     arr <- s$fun(r$r)[, , year_idx(), drop = FALSE]
@@ -259,11 +480,19 @@ server <- function(input, output, session) {
     yrs <- years_sel()
     par(mai = c(0.4, 0.4, 0.5, 0.2), mgp = c(1, 0.5, 0), cex = 0.85,
         cex.main = 1.0)
+    z <- mf$z
+    m <- dev_mask()
+    if (!is.null(m)) z[!m] <- NA
     plot_map_panel(
-      mf$z, r$lon, r$lat,
-      main = sprintf("%s\n%s, %d-%d", mf$label,
-                     if (input$map_summary == "mean") "mean" else "std dev",
-                     min(yrs), max(yrs)),
+      z, r$lon, r$lat,
+      main = sprintf("%s\n%s, %d-%d%s", mf$label,
+                     if (isTRUE(mf$single)) "mean over years" else
+                       if (input$map_summary == "mean") "mean" else "std dev",
+                     min(yrs), max(yrs),
+                     if (is.null(m)) "" else sprintf(
+                       " | %s dev_expl >= %g",
+                       if (input$thresh_src == "raw") "raw" else "smoothed",
+                       input$thresh)),
       zlim = mf$zlim, map_regions = r$cfg$map_regions,
       overlay = region_overlay(r$cfg), mark = c(c0$lon, c0$lat))
   })
@@ -272,8 +501,14 @@ server <- function(input, output, session) {
     c0 <- cell()
     req(c0)
     mf <- map_field()
-    sprintf("Grid cell: lon %.3f, lat %.3f  |  map value: %.3g",
-            c0$lon, c0$lat, mf$z[c0$i_lon, c0$i_lat])
+    txt <- sprintf("Grid cell: lon %.3f, lat %.3f  |  map value: %.3g",
+                   c0$lon, c0$lat, mf$z[c0$i_lon, c0$i_lat])
+    txt <- paste0(txt, sprintf("  |  mean dev_expl: %.3g",
+                               raw_dev_mean()[c0$i_lon, c0$i_lat]))
+    sm <- smooth_fit()
+    if (!is.null(sm))
+      txt <- paste0(txt, sprintf(", smoothed: %.3g", sm$fitted[c0$i_lon, c0$i_lat]))
+    txt
   })
 
   # -- Time series --
@@ -288,8 +523,8 @@ server <- function(input, output, session) {
     c0  <- cell()
     req(c0)
     yi  <- year_idx()
-    gold <- if (!is.null(r$gold_overlay) && isTRUE(input$show_gold))
-      r$r[[r$gold_overlay]][c0$i_lon, c0$i_lat, yi] else NULL
+    g <- gold_sel()
+    gold <- if (!is.null(g)) r$r[[g]][c0$i_lon, c0$i_lat, yi] else NULL
     list(rain        = cell_rain(),
          years       = years_sel(),
          chpt        = r$r$chpt[c0$i_lon, c0$i_lat, yi],
@@ -311,9 +546,13 @@ server <- function(input, output, session) {
 
   output$ts <- renderPlot({
     args <- ts_args()
-    validate(need(any(!is.na(args$rain)),
-                  paste("No precipitation data files found for these years in",
-                        resolve_path(run()$cfg$data_dir))))
+    r <- run()
+    validate(need(length(r$data_years) > 0, no_data_message(r$cfg)))
+    missing <- setdiff(years_sel(), r$data_years)
+    validate(need(any(!is.na(args$rain)), paste0(
+      "No precipitation data files for the displayed years (",
+      paste(range(missing), collapse = "-"), ") in ",
+      resolve_path(r$cfg$data_dir), ".\n", data_download_hint(r$cfg))))
     args$main <- NULL
     do.call(plot_location_panels, c(args, cex = 0.85))
   })
@@ -322,11 +561,11 @@ server <- function(input, output, session) {
     r <- run()
     sprintf(paste0("Gray: daily precip; shaded: doy %d-%d analysis window; ",
                    "red: spline fit; blue: changepoint fit (%s); dashed blue: ",
-                   "changepoint DOY%s. Titles: year  changepoint dev.expl%s."),
+                   "changepoint DOY%s. Titles: year, deviance explained."),
             r$meta$doy_start, r$meta$doy_end, r$meta$direction,
-            if (!is.null(r$gold_overlay) && isTRUE(input$show_gold))
-              paste0("; green: ", r$gold_label) else "",
-            if (!is.null(r$r$dev_full)) " : spline dev.expl" else "")
+            if (!is.null(gold_sel()))
+              paste0("; green: ", names(r$gold_choices)[r$gold_choices == gold_sel()])
+            else "")
   })
 
   output$download_ts <- downloadHandler(

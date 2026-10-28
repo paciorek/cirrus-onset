@@ -8,15 +8,15 @@ suppressPackageStartupMessages(library(mgcv))
 # Plot one panel per year for a single grid cell: the full annual series in
 # gray, the analysis window shaded, the spline fit (red), the changepoint
 # model's segment means (blue), a dashed line at the changepoint and,
-# optionally, a green line at the gold standard date.  Panel titles give
-# "changepoint dev.expl : spline dev.expl" (the latter only when dev_full has
-# been computed).
+# optionally, a green line at the gold standard date.  Panel titles are
+# "<year>, dev expl: <deviance explained by the changepoint model>".
 #
 # rain        : [day x year] matrix of daily precip for the cell
 # years       : year labels (length ncol(rain))
 # chpt        : changepoints (day of year), one per year
 # dev_expl    : deviance explained by the changepoint model, per year
-# dev_full    : deviance explained by the spline, per year (NULL = not shown)
+# dev_full    : deviance explained by the spline, per year (not shown in the
+#               titles; kept for compatibility)
 # doy_start, doy_end : analysis window
 # gold        : optional gold standard day of year per year (NULL = none)
 # y_max       : y-axis max (mm); NULL = data-driven per panel
@@ -92,9 +92,8 @@ plot_location_panels <- function(rain, years,
       lines(doy_window, changepoint_fitted(rain_window, chpt_rel, gamma_floor),
             col = "blue", lwd = 0.9)
       abline(v = chpt_abs, col = "blue", lty = 2, lwd = 0.8)
-      ttl <- paste0(years[k], "   ", round(dev_expl[k], 2))
-      if (!is.null(dev_full)) ttl <- paste0(ttl, " : ", round(dev_full[k], 2))
-      title(main = ttl, cex.main = 1.0)
+      title(main = sprintf("%s, dev expl: %.2f", years[k], dev_expl[k]),
+            cex.main = 1.0)
     } else {
       title(main = years[k], cex.main = 1.0)
     }
