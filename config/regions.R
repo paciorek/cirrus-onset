@@ -67,8 +67,8 @@ regions <- list(
       )
     ),
     zlim = list(
-      onset   = list(chpt = list(mean = c(150, 300), sd = NULL),
-                     dev_expl = list(mean = c(0, .5), sd = NULL)),
+      onset   = list(chpt = list(mean = c(0,240), sd = NULL),
+                     dev_expl = list(mean = c(0, 1), sd = NULL)),
       retreat = list(chpt = list(mean = c(210, 365), sd = NULL),
                      dev_expl = list(mean = c(0, 1), sd = NULL))
     ),
@@ -85,7 +85,8 @@ regions <- list(
     map_regions = ethiopia_map_regions,
     shapefile   = "../manual_zones_woredas.shp",
     gold_standard = NULL,
-    zlim = list(onset = list(), retreat = list()),
+    zlim = list(onset = list(chpt = list(mean = c(0, 180), sd = NULL)),
+                retreat = list()),
     shiny = list(default_lon = 38.5, default_lat = 9,
                  default_start = 2000, n_years_show = 25)
   )

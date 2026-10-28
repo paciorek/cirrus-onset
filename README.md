@@ -34,6 +34,30 @@ Rscript refactor/scripts/make_maps.R --region=india \
 R -e 'shiny::runApp("refactor/shiny")'
 ```
 
+### From an R session
+
+Each step is also an R function (the scripts are thin wrappers around them).
+A run is described by a `spec` from `make_spec()`; leave out `years` to use
+all years with data files.
+
+```r
+source("refactor/R/setup.R"); onset_setup("refactor")   # path to refactor/
+
+spec <- make_spec("india", years = 1951:2025, doy_start = 1, doy_end = 240,
+                  direction = "onset")
+
+res   <- run_changepoints_step(spec)                 # gamma_floor =, min_seg =
+stats <- run_stats_step(spec, metrics = c("pre_post", "dev_full"), workers = 8)
+run_maps_step(spec, maps = c("chpt", "dev_rel"))     # summaries = c("mean", "sd")
+
+run <- load_run(spec$region, spec$tag)   # all arrays for a run, e.g. run$r$chpt
+```
+
+`run_stats_step()` takes registry names or your own functions (see below);
+`metrics = names(metric_registry)` runs them all. After editing
+`config/regions.R` or a file in `R/`, call `onset_setup("refactor")` again to
+reload.
+
 Optional arguments:
 
 | Script | Argument | Default |

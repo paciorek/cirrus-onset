@@ -119,6 +119,8 @@ plot_map_panel <- function(z, lon, lat, main = "", zlim = NULL, col_n = 32,
   if (!all(is.finite(zlim))) zlim <- c(0, 1)
   z <- pmin(pmax(z, zlim[1]), zlim[2])
 
+  old_cex <- par()$cex  # `cex` being changed to 1 in image.plot somehow.
+  on.exit(par(cex = old_cex))
   image.plot(x = lon, y = lat, z = z, col = tim.colors(col_n), zlim = zlim,
              xlab = "", ylab = "", main = main, useRaster = TRUE, asp = 1)
   if (!is.null(map_regions))

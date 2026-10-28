@@ -29,36 +29,12 @@ usage <- paste(
 
 args <- parse_cli()
 spec <- run_spec_from_args(args, usage)
-cfg  <- get_region(spec$region)
-
 gamma_floor <- if (!is.null(args$gamma_floor)) as.numeric(args$gamma_floor) else
   analysis_defaults$gamma_floor
 min_seg <- if (!is.null(args$min_seg)) as.integer(args$min_seg) else
   analysis_defaults$min_seg
 
-out_file <- file.path(run_dir(spec$region, spec$tag), "changepoints.Rda")
+if(min_seg < 1)
+  stop("min_seg must be at least 1")
 
-msg("estimate_changepoints:", spec$tag)
-msg("gamma_floor =", gamma_floor, " min_seg =", min_seg)
-
-t0   <- Sys.time()
-data <- read_region(cfg, spec$years, spec$doy_start, spec$doy_end)
-msg("data read in", format(round(Sys.time() - t0, 1)))
-
-t1  <- Sys.time()
-chg <- estimate_changepoints_grid(data, gamma_floor = gamma_floor,
-                                  min_seg = min_seg, direction = spec$direction)
-msg("changepoints computed in", format(round(Sys.time() - t1, 1)))
-
-results <- list(
-  chpt     = chg$chpt,
-  dev_expl = chg$dev_expl,
-  lon      = data$lon,
-  lat      = data$lat,
-  years    = data$years,
-  land     = apply(!is.na(chg$dev_expl), c(1, 2), any),
-  meta     = make_meta(spec, gamma_floor = gamma_floor, min_seg = min_seg,
-                       data_files = data$files)
-)
-save(results, file = out_file)
-msg("saved", out_file)
+run_changepoints_step(spec, gamma_floor = gamma_floor, min_seg = min_seg)
