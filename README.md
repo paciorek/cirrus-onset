@@ -1,8 +1,6 @@
-# Onset/retreat analysis pipeline (refactor)
+# Onset/retreat analysis pipeline
 
-Region-agnostic version of the India and Ethiopia onset code. Nothing outside
-`refactor/` is used except the raw data, the gold standard files and the
-Ethiopia shapefile, which `config/regions.R` points to with relative paths.
+Region-agnostic version of the India and Ethiopia onset code. 
 
 Every run is defined by four inputs: **region**, **years**, **window**
 (`--doy=start:end`, within one calendar year, end at most 365) and
@@ -19,19 +17,19 @@ pass `--years` explicitly to keep referring to the same run.
 
 ```sh
 # 1. Changepoints (serial; India, all years: about a minute plus file reading)
-Rscript refactor/scripts/estimate_changepoints.R --region=india \
+Rscript scripts/estimate_changepoints.R --region=india \
     --years=1901:2025 --doy=1:240 --direction=onset
 
 # 2. Summary statistics (parallel over longitudes)
-Rscript refactor/scripts/compute_stats.R --region=india \
+Rscript scripts/compute_stats.R --region=india \
     --years=1901:2025 --doy=1:240 --direction=onset --workers=24
 
 # 3. Maps -> output/<region>/<tag>/maps/*.pdf
-Rscript refactor/scripts/make_maps.R --region=india \
+Rscript scripts/make_maps.R --region=india \
     --years=1901:2025 --doy=1:240 --direction=onset
 
 # 4. Browse runs
-R -e 'shiny::runApp("refactor/shiny")'
+R -e 'shiny::runApp("shiny")'
 ```
 
 ### From an R session
@@ -41,7 +39,7 @@ A run is described by a `spec` from `make_spec()`; leave out `years` to use
 all years with data files.
 
 ```r
-source("refactor/R/setup.R"); onset_setup("refactor")   # path to refactor/
+source("R/setup.R"); onset_setup(".")   # run from the base directory
 
 spec <- make_spec("india", years = 1951:2025, doy_start = 1, doy_end = 240,
                   direction = "onset")
@@ -55,7 +53,7 @@ run <- load_run(spec$region, spec$tag)   # all arrays for a run, e.g. run$r$chpt
 
 `run_stats_step()` takes registry names or your own functions (see below);
 `metrics = names(metric_registry)` runs them all. After editing
-`config/regions.R` or a file in `R/`, call `onset_setup("refactor")` again to
+`config/regions.R` or a file in `R/`, call `onset_setup(".")` again to
 reload.
 
 Optional arguments:
@@ -87,9 +85,9 @@ sample of cell-years, and with `--old=<file>` compares against an older
 results file:
 
 ```sh
-Rscript refactor/scripts/validate_changepoints.R --region=india \
+Rscript scripts/validate_changepoints.R --region=india \
     --years=2020:2021 --doy=1:240 --direction=onset --n=100 \
-    --old=../india_changepoints_doy1-240.Rda
+    --old=scratch/india_changepoints_doy1-240.Rda
 ```
 
 (`--old` reads the new changepoints from the run's `changepoints.Rda`, so run
@@ -104,7 +102,7 @@ it to `metric_registry` in `R/metrics.R` to use it from the command line, or
 call the step from R:
 
 ```r
-source("refactor/R/setup.R"); onset_setup("refactor")
+source("R/setup.R"); onset_setup(".")
 spec <- make_spec("india", 1901:2025, 1, 240, "onset")
 # or all years with data files:
 # spec <- make_spec("india", doy_start = 1, doy_end = 240, direction = "onset")
@@ -133,6 +131,34 @@ gives doy 91 in normal years and 92 in leap years). Datasets are used only for
 runs with matching `direction`; the one with `overlay = TRUE` is drawn on the
 Shiny time series.
 
+### Map color limits
+
+Both `make_maps` and the Shiny app resolve each map's color limits in this
+order (later wins):
+
+1. Defaults in `map_specs()` (`R/maps.R`). The changepoint map (and the gold
+   standard maps) default to the run's own window, e.g. 150 to 365 for a
+   `--doy=150:365` run, so they usually need no setting.
+2. `zlim$<direction>` in the region config: applies to every window of that
+   direction.
+3. `zlim$windows$"<direction>_doy<start>-<end>"`: applies to that window only.
+
+```r
+zlim = list(
+  onset   = list(dev_expl = list(mean = c(0, 1))),
+  retreat = list(),
+  windows = list(
+    "onset_doy1-240"     = list(chpt = list(mean = c(0, 240))),
+    "retreat_doy210-365" = list(chpt = list(mean = c(210, 365), sd = c(0, 40)))
+  )
+)
+```
+
+Give only the panels you want to change (`mean`, `sd`); `NULL` means
+automatic. Map names are those of the PDFs in `maps/` (`chpt`, `dev_expl`,
+`dev_full`, `dev_rel`, `pre_mean`, `post_mean`, `post_frac`, `transition_sd`,
+`transition_edf`).
+
 ## Files
 
 | Path | Contents |
@@ -148,4 +174,4 @@ Shiny time series.
 | `R/maps.R` | Map specs, year summaries, map plotting |
 | `R/run_io.R` | `load_run()`, `list_runs()` |
 | `scripts/` | The step scripts and the validation script |
-| `shiny/` | Adapted copy of `../shiny` (original untouched) |
+| `shiny/` | Adapted copy of the original app (`scratch/shiny`, untouched) |

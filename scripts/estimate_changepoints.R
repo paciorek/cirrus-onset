@@ -3,14 +3,14 @@
 # Step 1: changepoint day and deviance explained for every cell and year.
 #
 # Usage (from any directory):
-#   Rscript refactor/scripts/estimate_changepoints.R --region=india \
+#   Rscript scripts/estimate_changepoints.R --region=india \
 #       --years=1951:2025 --doy=1:240 --direction=onset \
 #       [--gamma_floor=1] [--min_seg=5]
 #
 # --years is optional (here and in the other scripts): without it, every year
 # with a data file covering the window is used.
 #
-# Output: refactor/output/<region>/<tag>/changepoints.Rda (object `results`;
+# Output: output/<region>/<tag>/changepoints.Rda (object `results`;
 # see R/run_io.R).  Runs serially; India for all years takes a few minutes of
 # computation plus the time to read the files.
 
@@ -31,10 +31,8 @@ args <- parse_cli()
 spec <- run_spec_from_args(args, usage)
 gamma_floor <- if (!is.null(args$gamma_floor)) as.numeric(args$gamma_floor) else
   analysis_defaults$gamma_floor
-min_seg <- if (!is.null(args$min_seg)) as.integer(args$min_seg) else
+# (min_seg and gamma_floor are checked in run_changepoints_step())
+min_seg <- if (!is.null(args$min_seg)) as.numeric(args$min_seg) else
   analysis_defaults$min_seg
-
-if(min_seg < 1)
-  stop("min_seg must be at least 1")
 
 run_changepoints_step(spec, gamma_floor = gamma_floor, min_seg = min_seg)

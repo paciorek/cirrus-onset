@@ -9,7 +9,8 @@
 #   fun     function(r) returning a lon x lat x year array from the list of
 #           arrays r (so derived quantities are computed here, not stored)
 #   zlim    list(mean = , sd = ) colour limits; NULL = automatic.  Region
-#           config can override these (cfg$zlim[[direction]][[name]]).
+#           config can override these for a direction or a single window;
+#           see specs_for_run() and config/regions.R.
 
 suppressPackageStartupMessages({
   library(fields)
@@ -69,13 +70,30 @@ gold_map_specs <- function(cfg, direction, chpt_zlim) {
   setNames(specs, paste0("gold_", names(gs)))
 }
 
-# All specs for a run, with region overrides applied and specs whose inputs
-# are missing dropped.
-specs_for_run <- function(r, cfg, direction) {
+# Key identifying a window in cfg$zlim$windows, e.g. "onset_doy1-240".
+window_key <- function(direction, doy_start, doy_end) {
+  sprintf("%s_doy%d-%d", direction, doy_start, doy_end)
+}
+
+# All specs for a run, with colour limits resolved and specs whose inputs
+# are missing dropped.  Colour limits, from lowest to highest precedence:
+#   1. the defaults in map_specs(), except that chpt defaults to the run's
+#      window (doy_start to doy_end) for the mean panel;
+#   2. cfg$zlim[[direction]]                       (all windows of a direction)
+#   3. cfg$zlim$windows[["<direction>_doy<a>-<b>"]] (this window only)
+# Gold standard maps use the resolved chpt limits.
+specs_for_run <- function(r, cfg, direction, doy_start, doy_end) {
   specs <- map_specs()
-  over  <- cfg$zlim[[direction]]
-  for (nm in intersect(names(over), names(specs)))
-    specs[[nm]]$zlim <- modifyList(specs[[nm]]$zlim, over[[nm]])
+  specs$chpt$zlim$mean <- c(doy_start, doy_end)
+  overrides <- list(cfg$zlim[[direction]],
+                    cfg$zlim$windows[[window_key(direction, doy_start, doy_end)]])
+  for (over in overrides) {
+    unknown <- setdiff(names(over), names(specs))
+    if (length(unknown))
+      warning("zlim given for unknown map(s): ", paste(unknown, collapse = ", "))
+    for (nm in intersect(names(over), names(specs)))
+      specs[[nm]]$zlim <- modifyList(specs[[nm]]$zlim, over[[nm]])
+  }
   specs <- c(specs, gold_map_specs(cfg, direction, specs$chpt$zlim))
   Filter(function(s) all(s$needs %in% names(r)), specs)
 }

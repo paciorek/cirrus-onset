@@ -4,7 +4,8 @@
 # so adding a region (with yearly NetCDF precipitation files) means adding an
 # entry to `regions`.
 #
-# Relative paths are resolved against the refactor/ directory.
+# Relative paths are resolved against the root (base) directory, e.g.
+# "data/..." is <base_dir>/data/....
 #
 # Fields:
 #   label          display name
@@ -26,8 +27,22 @@
 #                    label      display name
 #                    overlay    TRUE for the (one) dataset drawn as a vertical
 #                               bar in the Shiny time series
-#   zlim           optional colour-limit overrides for maps, by direction and
-#                  map name: zlim$onset$chpt = list(mean = c(70, 280), sd = NULL)
+#   zlim           optional colour-limit overrides for maps.  Each override is
+#                  list(<map name> = list(mean = c(lo, hi), sd = c(lo, hi)));
+#                  give only the panels you want to change (NULL = automatic).
+#                  Overrides can apply to every window of a direction, or to
+#                  one window only:
+#                    zlim = list(
+#                      onset   = list(dev_expl = list(mean = c(0, 1))),
+#                      retreat = list(),
+#                      windows = list(
+#                        "onset_doy150-365" = list(chpt = list(mean = c(150, 300)))
+#                      ))
+#                  Window keys are "<direction>_doy<start>-<end>", the end of
+#                  the run tag.  Precedence: built-in default < direction <
+#                  window.  The built-in default for chpt (and the gold
+#                  standard maps) is the run's own window, so chpt rarely
+#                  needs an override.
 #   shiny          defaults for the Shiny app
 
 india_map_regions <- c("India", "Pakistan", "China", "Nepal",
@@ -40,7 +55,7 @@ regions <- list(
 
   india = list(
     label       = "India (IMD 0.25\u00b0)",
-    data_dir    = "../data/india_onset/IMD_25by25",
+    data_dir    = "data/india_onset/IMD_25by25",
     file_fmt    = "data_%d.nc",
     var_name    = "RAINFALL",
     dim_names   = c(lon = "LONGITUDE", lat = "LATITUDE", time = "TIME"),
@@ -48,7 +63,7 @@ regions <- list(
     shapefile   = NULL,
     gold_standard = list(
       o2_any = list(
-        file      = "../O2_onset_full_timeseries_025x025_withoutMOK.nc4",
+        file      = "data/O2_onset_full_timeseries_025x025_withoutMOK.nc4",
         var_name  = "O2_onset",
         dim_names = c(lon = "lon", lat = "lat", year = "year"),
         direction = "onset",
@@ -57,7 +72,7 @@ regions <- list(
         overlay   = TRUE
       ),
       o2_postMOK = list(
-        file      = "../O2_onset_full_timeseries_025x025.nc4",
+        file      = "data/O2_onset_full_timeseries_025x025.nc4",
         var_name  = "O2_onset",
         dim_names = c(lon = "lon", lat = "lat", year = "year"),
         direction = "onset",
@@ -67,10 +82,12 @@ regions <- list(
       )
     ),
     zlim = list(
-      onset   = list(chpt = list(mean = c(0,240), sd = NULL),
-                     dev_expl = list(mean = c(0, 1), sd = NULL)),
-      retreat = list(chpt = list(mean = c(210, 365), sd = NULL),
-                     dev_expl = list(mean = c(0, 1), sd = NULL))
+      onset   = list(dev_expl = list(mean = c(0, 1), sd = NULL)),
+      retreat = list(dev_expl = list(mean = c(0, 1), sd = NULL)),
+      windows = list(
+        "onset_doy1-240"     = list(chpt = list(mean = c(0, 240), sd = NULL)),
+        "retreat_doy210-365" = list(chpt = list(mean = c(210, 365), sd = NULL))
+      )
     ),
     shiny = list(default_lon = 77, default_lat = 25,
                  default_start = 2000, n_years_show = 25)
@@ -78,15 +95,20 @@ regions <- list(
 
   ethiopia = list(
     label       = "Ethiopia (CHIRPS 0.25\u00b0)",
-    data_dir    = "../data/ethiopia_onset/CHIRPS_IMERG",
+    data_dir    = "data/ethiopia_onset/CHIRPS_IMERG",
     file_fmt    = "%d.nc",
     var_name    = "RAINFALL",
     dim_names   = c(lon = "LONGITUDE", lat = "LATITUDE", time = "TIME"),
     map_regions = ethiopia_map_regions,
-    shapefile   = "../manual_zones_woredas.shp",
+    shapefile   = "data/ethiopia_onset/manual_zones_woredas.shp",
     gold_standard = NULL,
-    zlim = list(onset = list(chpt = list(mean = c(0, 180), sd = NULL)),
-                retreat = list()),
+    zlim = list(
+      onset   = list(),
+      retreat = list(),
+      windows = list(
+        "onset_doy1-240" = list(chpt = list(mean = c(0, 180), sd = NULL))
+      )
+    ),
     shiny = list(default_lon = 38.5, default_lat = 9,
                  default_start = 2000, n_years_show = 25)
   )

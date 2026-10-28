@@ -4,7 +4,7 @@
 # changepoints from step 1.  Runs in parallel over longitudes.
 #
 # Usage:
-#   Rscript refactor/scripts/compute_stats.R --region=india --years=1951:2025 \
+#   Rscript scripts/compute_stats.R --region=india --years=1951:2025 \
 #       --doy=1:240 --direction=onset \
 #       [--metrics=dev_full,pre_post,transition_sd,transition_edf] \
 #       [--metric_args=dev_full.spline_k=20,transition_sd.window=7] \
@@ -13,7 +13,7 @@
 # --metrics     registry names from R/metrics.R (default: all)
 # --workers     default: SLURM_CPUS_PER_TASK if set, else 1
 #
-# Output: refactor/output/<region>/<tag>/stats.Rda (object `stats`).  If the
+# Output: output/<region>/<tag>/stats.Rda (object `stats`).  If the
 # file exists, arrays for the metrics computed now are replaced and the others
 # kept.
 #

@@ -10,13 +10,13 @@
 # glm(y ~ 1)) with changepoint_series().
 #
 # Optionally (--old=<file>) also compares the new changepoints for the run's
-# years with an older results file (e.g. ../india_changepoints_doy1-240.Rda),
+# years with an older results file (e.g. scratch/india_changepoints_doy1-240.Rda),
 # reading the new ones from this run's changepoints.Rda.
 #
 # Usage:
-#   Rscript refactor/scripts/validate_changepoints.R --region=india \
+#   Rscript scripts/validate_changepoints.R --region=india \
 #       --years=2000:2005 --doy=1:240 --direction=onset [--n=200] [--seed=1] \
-#       [--gamma_floor=1] [--min_seg=5] [--old=../india_changepoints_doy1-240.Rda]
+#       [--gamma_floor=1] [--min_seg=5] [--old=scratch/india_changepoints_doy1-240.Rda]
 
 local({
   a <- commandArgs(trailingOnly = FALSE)

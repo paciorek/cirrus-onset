@@ -2,18 +2,18 @@
 #
 # Run naming, paths, argument parsing and metadata checks shared by all steps.
 
-refactor_dir <- function() {
-  d <- getOption("onset.refactor_dir")
+base_dir <- function() {
+  d <- getOption("onset.base_dir")
   if (is.null(d)) stop("onset_setup() has not been called.")
   d
 }
 
 # Resolve a path from the config: absolute paths are returned unchanged,
-# relative ones are taken relative to the refactor/ directory.
+# relative ones are taken relative to the root directory.
 resolve_path <- function(p) {
   if (is.null(p)) return(NULL)
   if (grepl("^(/|~|[A-Za-z]:)", p)) return(path.expand(p))
-  file.path(refactor_dir(), p)
+  file.path(base_dir(), p)
 }
 
 get_region <- function(region) {
@@ -97,7 +97,7 @@ parse_run_tag <- function(tag) {
        direction = m[7])
 }
 
-output_root <- function() file.path(refactor_dir(), "output")
+output_root <- function() file.path(base_dir(), "output")
 
 run_dir <- function(region, tag, create = TRUE) {
   d <- file.path(output_root(), region, tag)

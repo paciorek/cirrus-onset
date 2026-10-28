@@ -1,11 +1,11 @@
 # make_maps.R
 #
 # Step 3: one PDF per map (mean and SD across years) for a run, written to
-# refactor/output/<region>/<tag>/maps/.  Uses changepoints.Rda, stats.Rda (if
+# output/<region>/<tag>/maps/.  Uses changepoints.Rda, stats.Rda (if
 # present) and any gold standard dataset for the run's direction.
 #
 # Usage:
-#   Rscript refactor/scripts/make_maps.R --region=india --years=1951:2025 \
+#   Rscript scripts/make_maps.R --region=india --years=1951:2025 \
 #       --doy=1:240 --direction=onset [--summaries=mean,sd] [--maps=chpt,dev_expl]
 #
 # --summaries   names from year_summaries in R/maps.R (default: all)

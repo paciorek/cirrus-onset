@@ -3,7 +3,7 @@
 # The pipeline steps as R functions, so they can be run from an R session as
 # well as from the scripts (which are thin wrappers around these).
 #
-#   source("refactor/R/setup.R"); onset_setup("refactor")
+#   source("R/setup.R"); onset_setup(".")
 #   spec <- make_spec("india", doy_start = 1, doy_end = 240, direction = "onset")
 #   res   <- run_changepoints_step(spec)
 #   stats <- run_stats_step(spec, metrics = c("pre_post", "dev_full"), workers = 8)
@@ -16,6 +16,20 @@
 run_changepoints_step <- function(spec,
                                   gamma_floor = analysis_defaults$gamma_floor,
                                   min_seg = analysis_defaults$min_seg) {
+  # Check settings before reading any data.
+  n_win <- spec$doy_end - spec$doy_start + 1
+  if (length(min_seg) != 1 || !is.finite(min_seg) || min_seg < 1 ||
+      min_seg != round(min_seg))
+    stop("min_seg must be a whole number of at least 1 (got ", min_seg, ").",
+         call. = FALSE)
+  if (2 * min_seg > n_win)
+    stop("min_seg = ", min_seg, " is too large for a ", n_win,
+         "-day window (each segment needs min_seg days).", call. = FALSE)
+  if (length(gamma_floor) != 1 || !is.finite(gamma_floor) || gamma_floor <= 0)
+    stop("gamma_floor must be a positive number (got ", gamma_floor, ").",
+         call. = FALSE)
+  min_seg <- as.integer(min_seg)
+
   cfg <- get_region(spec$region)
   out_file <- file.path(run_dir(spec$region, spec$tag), "changepoints.Rda")
 
@@ -59,7 +73,8 @@ run_maps_step <- function(spec, maps = NULL, summaries = names(year_summaries)) 
   bad <- setdiff(summaries, names(year_summaries))
   if (length(bad)) stop("Unknown summaries: ", paste(bad, collapse = ", "))
 
-  specs <- specs_for_run(run$r, run$cfg, spec$direction)
+  specs <- specs_for_run(run$r, run$cfg, spec$direction,
+                         spec$doy_start, spec$doy_end)
   if (!is.null(maps)) {
     missing <- setdiff(maps, names(specs))
     if (length(missing))

@@ -1,7 +1,7 @@
 # app.R -- Rainy-season onset/retreat explorer
 #
-# Adapted copy of ../../shiny/app.R that reads the refactored pipeline's
-# outputs.  A dropdown lists every run found under refactor/output/
+# Adapted copy of scratch/shiny/app.R that reads the pipeline's
+# outputs.  A dropdown lists every run found under output/
 # (region, years, window, direction).
 #
 # Left panel: a map of a chosen statistic summarized over the selected years.
@@ -11,8 +11,8 @@
 # the region has one for the run's direction.
 #
 # Run from R with
-#   shiny::runApp("~/research/boos/onset/refactor/shiny")
-# Set ONSET_REFACTOR_DIR if refactor/ is not the parent of this directory.
+#   shiny::runApp("./shiny")
+# Set ONSET_DIR if not in the root directory.
 
 library(shiny)
 
@@ -128,7 +128,7 @@ server <- function(input, output, session) {
       paste0("gold_", ov[1]) else NULL
     r$gold_label <- if (!is.null(r$gold_overlay)) gs[[ov[1]]]$label else NULL
 
-    r$menu    <- specs_for_run(r$r, cfg, dir)
+    r$menu    <- specs_for_run(r$r, cfg, dir, r$meta$doy_start, r$meta$doy_end)
     r$n_show  <- min(cfg$shiny$n_years_show, length(r$years))
     r$start_min <- min(r$years)
     r$start_max <- r$years[length(r$years) - r$n_show + 1]

@@ -1,23 +1,23 @@
 # setup.R
 #
 # Load the region config and all shared functions.  Every script calls
-#   source(file.path(refactor_dir, "R", "setup.R")); onset_setup(refactor_dir)
-# where refactor_dir is the path of the `refactor/` directory.  Relative paths
+#   source(file.path(base_dir, "R", "setup.R")); onset_setup(base_dir)
+# where base_dir is the path of repository directory.  Relative paths
 # in config/regions.R (data folders, gold standard files, shapefiles) are
-# resolved against refactor_dir.
+# resolved against `base_dir`.
 
-onset_setup <- function(refactor_dir, envir = globalenv()) {
-  refactor_dir <- normalizePath(refactor_dir, mustWork = TRUE)
-  options(onset.refactor_dir = refactor_dir)
+onset_setup <- function(base_dir, envir = globalenv()) {
+  base_dir <- normalizePath(base_dir, mustWork = TRUE)
+  options(onset.base_dir = base_dir)
 
-  sys.source(file.path(refactor_dir, "config", "regions.R"), envir = envir)
+  sys.source(file.path(base_dir, "config", "regions.R"), envir = envir)
 
-  r_files <- list.files(file.path(refactor_dir, "R"), pattern = "\\.R$",
+  r_files <- list.files(file.path(base_dir, "R"), pattern = "\\.R$",
                         full.names = TRUE)
   r_files <- r_files[basename(r_files) != "setup.R"]
   for (f in r_files) sys.source(f, envir = envir)
 
-  invisible(refactor_dir)
+  invisible(base_dir)
 }
 
 # Directory of the currently running Rscript (falls back to the working
