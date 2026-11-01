@@ -106,7 +106,22 @@ regions <- list(
     dim_names   = c(lon = "LONGITUDE", lat = "LATITUDE", time = "TIME"),
     map_regions = ethiopia_map_regions,
     shapefile   = "data/ethiopia_onset/manual_zones_woredas.shp",
-    gold_standard = NULL,
+    gold_standard = list(
+      # ROMP onset from CHIRPS, 2000-2022, made from the yearly files in
+      # data/ethiopia_onset/climatology_onset_doy_by_year by
+      # scripts/combine_gold_standard.R.  Values are calendar day of year
+      # (so origin "01-01"); onset is restricted to after May 15
+      # (romp_mok), and cells with no detected onset are missing.
+      romp = list(
+        file      = "data/ethiopia_onset/onset_doy_2000-2022.nc",
+        var_name  = "onset_doy",
+        dim_names = c(lon = "lon", lat = "lat", year = "year"),
+        direction = "onset",
+        origin    = "01-01",
+        label     = "ROMP (CHIRPS, after May 15)",
+        overlay   = TRUE
+      )
+    ),
     zlim = list(
       onset   = list(),
       retreat = list(),
