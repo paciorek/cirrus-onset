@@ -23,10 +23,10 @@ To view the app, run `Rscript -e "shiny::runApp('./shiny')"` from the root direc
 of the repository (or start R from that directory and run `shiny::runApp('./shiny')`.
 
 To use the app, you will need the raw data and the changepoint and summary stats output.
-This can be obtained from `http://www.stat.berkeley.edu/share/paciorek/cirrus-onset-data.zip`.
-
+These can be obtained from `http://www.stat.berkeley.edu/share/paciorek/cirrus-onset-data.zip`.
 Take the zip file and unzip it while in the root directory of the repository. That will populate 
-subdirectories named `data` and `output`. 
+subdirectories named `data` and `output`. The changepoint and summary stats output can also be
+computed using the steps shown later in this document.
 
 You will also need to have R installed, and to install the R packages: `shiny`, `fields`, and `ncdf4`:
 `Rscript -e "install.packages(c('shiny','fields','ncdf4'))"` (or run that `install.packages` command from within R).
