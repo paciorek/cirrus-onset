@@ -1,11 +1,35 @@
 # Onset/retreat analysis pipeline
 
-Region-agnostic version of the India and Ethiopia onset code. 
+This code estimates onset using a statistical changepoint analysis
+and uses summary statistics (in particular the deviance of the changepoint
+model fit relative to a baseline intercept-only model) to try to 
+determine subregions where there is a clear onset of precipitation during
+a chosen time window of the year.
+The code can also be used to look at the retreat of precipitation (end of
+the wet season) or (with small modifications) transitions in other climate variables.
 
-Every run is defined by four inputs: **region**, **years**, **window**
-(`--doy=start:end`, within one calendar year, end at most 365) and
-**direction** (`onset` = dry to wet, `retreat` = wet to dry). Outputs go to
-`output/<region>/<tag>/`, where the tag is e.g. `india_1951-2025_doy1-240_onset`.
+There is an interactive app (a Shiny app) that allows one to visualize
+the summary statistics on a map, in combination with seeing actual time 
+series and estimated onset dates and model fits for (user-specified)
+individual grid cells.
+
+Currently there is configuration information for India and Ethiopia only,
+but this would be easy to extend to other regions.
+
+
+## Interactive (Shiny) app
+
+To view the app, run `Rscript -e "shiny::runApp('./shiny')"` from the root directory
+of the repository (or start R from that directory and run `shiny::runApp('./shiny')`.
+
+To use the app, you will need the raw data and the changepoint and summary stats output.
+This can be obtained from `http://www.stat.berkeley.edu/share/paciorek/cirrus-onset-data.zip`.
+
+Take the zip file and unzip it while in the root directory of the repository. That will populate 
+subdirectories named `data` and `output`. 
+
+You will also need to have R installed, and to install the R packages: `shiny`, `fields`, and `ncdf4`:
+`Rscript -e "install.packages(c('shiny','fields','ncdf4'))"` (or run that `install.packages` command from within R).
 
 ## Data
 
@@ -22,18 +46,30 @@ place of the time series.
 
 ## Steps
 
+Every run is defined by four inputs: **region**, **years**, **window**
+(`--doy=start:end`, within one calendar year, end at most 365) and
+**direction** (`onset` = dry to wet, `retreat` = wet to dry). Outputs go to
+`output/<region>/<tag>/`, where the tag is, e.g., `india_1951-2025_doy1-240_onset`.
+
 Scripts can be run from any directory. `--years` is optional: without it,
 every year with a data file in the region's data folder is used (years whose
 file ends before the window does are skipped, with a message). Steps 2 and 3
 look the years up again the same way, so if you add data files between steps,
 pass `--years` explicitly to keep referring to the same run.
 
+The time interval (`doy` argument) should be carefully chosen to include only
+one possible changepoint (i.e., it should cover the onset (or retreat) dates
+over many years, with as much time before and after the onset (or retreat) dates
+but not so much that it would include other transitions (wet-to-dry or dry-to-wet) than
+the focal transition. This is because the model fitting is restricted to have one changepoint
+and cannot represent data with two changepoints.
+
 ```sh
 # 1. Changepoints (serial; India, all years: about a minute plus file reading)
 Rscript scripts/estimate_changepoints.R --region=india \
     --years=1901:2025 --doy=1:240 --direction=onset
 
-# 2. Summary statistics (parallel over longitudes)
+# 2. Summary statistics (parallel over longitudes, time-consuming when fitting spline-based GAM models)
 Rscript scripts/compute_stats.R --region=india \
     --years=1901:2025 --doy=1:240 --direction=onset --workers=24
 
