@@ -95,6 +95,7 @@ ui <- fluidPage(
                                selected = "mean", inline = TRUE))
       ),
       selectInput("map_stat", "Map statistic", choices = NULL, width = "100%"),
+      uiOutput("overlay_ui"),
       plotOutput("map", height = "460px", click = "map_click"),
       div(class = "help-note",
           "Click the map, or enter a latitude/longitude below, to select a ",
@@ -245,6 +246,18 @@ server <- function(input, output, session) {
     r <- run()
     g <- input$gold_sel
     if (is.null(g) || !g %in% r$gold_choices) NULL else g
+  })
+
+  # Shapefile overlay toggle, shown only for regions with a shapefile in
+  # their config.  Keeps its current setting when the run changes.
+  output$overlay_ui <- renderUI({
+    r <- run()
+    if (is.null(r$cfg$shapefile)) return(NULL)
+    checkboxInput("show_overlay",
+                  sprintf("Show shapefile overlay (%s)",
+                          basename(r$cfg$shapefile)),
+                  value = isTRUE(isolate(input$show_overlay)) ||
+                    is.null(isolate(input$show_overlay)))
   })
 
   output$data_status_ui <- renderUI({
@@ -494,7 +507,8 @@ server <- function(input, output, session) {
                        if (input$thresh_src == "raw") "raw" else "smoothed",
                        input$thresh)),
       zlim = mf$zlim, map_regions = r$cfg$map_regions,
-      overlay = region_overlay(r$cfg), mark = c(c0$lon, c0$lat))
+      overlay = if (!isFALSE(input$show_overlay)) region_overlay(r$cfg),
+      mark = c(c0$lon, c0$lat))
   })
 
   output$cell_info <- renderText({
