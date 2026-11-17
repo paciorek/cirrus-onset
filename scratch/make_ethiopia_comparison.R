@@ -1,4 +1,4 @@
-source("R/compare_gold.R")
+source("compare_gold.R")
 
 png('ethiopia_chpt_vs_onset.png', height=600,width=600)
 par(mfrow=c(2,2))
