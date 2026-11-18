@@ -146,7 +146,7 @@ ui <- fluidPage(
     ),
     mainPanel(
       width = 7,
-      plotOutput("ts", height = "820px"),
+      plotOutput("ts", height = "820px", click = "ts_click"),
       div(class = "help-note", textOutput("ts_legend")),
       hr(),
       fluidRow(
@@ -157,7 +157,14 @@ ui <- fluidPage(
         column(4, uiOutput("gold_ui")),
         column(3, div(style = "margin-top: 25px;",
                       downloadButton("download_ts", "Download time-series PDF")))
-      )
+      ),
+      hr(),
+      plotOutput("spline_overlay", height = "380px", click = "spline_click"),
+      div(class = "help-note",
+          "Spline fits (red lines in the panels above) for all displayed years, ",
+          "over the analysis window only. Click a line here, or a year's panel ",
+          "above, to highlight that year in both plots; click it again, or ",
+          "away from the lines here, to clear.")
     )
   )
 )
@@ -532,6 +539,26 @@ server <- function(input, output, session) {
     read_cell_series(run()$cfg, years_sel(), c0$lon, c0$lat)
   })
 
+  # Spline fits for the displayed years, shared by the per-year panels and
+  # the overlay plot
+  cell_spline <- reactive({
+    r <- run()
+    spline_fits(cell_rain(), r$meta$doy_start, r$meta$doy_end,
+                r$spline_k, r$meta$gamma_floor)
+  })
+
+  # Year selected by clicking a line in the spline overlay plot (NULL =
+  # none).  Cleared when the location, run or displayed years change.
+  selected_year <- reactiveVal(NULL)
+  observeEvent(list(cell(), run(), years_sel()), selected_year(NULL),
+               ignoreInit = TRUE)
+  observeEvent(input$spline_click, {
+    r  <- run()
+    yr <- nearest_spline_year(cell_spline(), r$meta$doy_start,
+                              input$spline_click$x, input$spline_click$y)
+    selected_year(if (is.null(yr) || identical(yr, selected_year())) NULL else yr)
+  })
+
   ts_args <- reactive({
     r   <- run()
     c0  <- cell()
@@ -551,6 +578,8 @@ server <- function(input, output, session) {
          y_max       = if (isTRUE(input$free_y)) NULL else input$y_max,
          spline_k    = r$spline_k,
          gamma_floor = r$meta$gamma_floor,
+         spline      = cell_spline(),
+         highlight   = selected_year(),
          # Outer title only for the PDF download (the app shows the location
          # in the left panel)
          main        = sprintf("%s - lat %.3f, lon %.3f  |  doy %d-%d, %s",
@@ -568,7 +597,39 @@ server <- function(input, output, session) {
       paste(range(missing), collapse = "-"), ") in ",
       resolve_path(r$cfg$data_dir), ".\n", data_download_hint(r$cfg))))
     args$main <- NULL
-    do.call(plot_location_panels, c(args, cex = 0.85))
+    ts_regions <<- do.call(plot_location_panels, c(args, cex = 0.85))
+  })
+
+  # Clicking a year's panel selects that year (highlighting its curve in the
+  # spline overlay plot and outlining the panel); clicking it again clears.
+  # The panel grid is one image, so the click's pixel position is mapped to
+  # a panel using the panel regions recorded when it was drawn.
+  ts_regions <- NULL
+  observeEvent(input$ts_click, {
+    cc <- input$ts_click$coords_css
+    w  <- session$clientData$output_ts_width
+    h  <- session$clientData$output_ts_height
+    if (is.null(cc) || is.null(w) || is.null(h)) return()
+    yr <- panel_at(ts_regions, cc$x / w, 1 - cc$y / h)
+    if (is.null(yr)) return()
+    sp <- cell_spline()
+    if (!yr %in% colnames(sp) || !any(is.finite(sp[, yr]))) {
+      showNotification(sprintf("No spline fit for %s.", yr), type = "warning")
+      return()
+    }
+    selected_year(if (identical(yr, selected_year())) NULL else yr)
+  })
+
+  output$spline_overlay <- renderPlot({
+    r <- run()
+    validate(need(any(!is.na(cell_rain())), "No precipitation data to fit."))
+    a <- ts_args()
+    g <- gold_sel()
+    plot_spline_overlay(cell_spline(), r$meta$doy_start, r$meta$doy_end,
+                        highlight = selected_year(), chpt = a$chpt,
+                        gold = a$gold,
+                        gold_label = if (is.null(g)) "gold standard" else
+                          names(r$gold_choices)[r$gold_choices == g])
   })
 
   output$ts_legend <- renderText({
@@ -589,9 +650,18 @@ server <- function(input, output, session) {
               min(years_sel()), max(years_sel()))
     },
     content = function(file) {
+      args <- ts_args()
       pdf(file, width = 11, height = 9)
       on.exit(dev.off())
-      do.call(plot_location_panels, ts_args())
+      do.call(plot_location_panels, args)
+      # Page 2: all years' spline fits together
+      g <- gold_sel()
+      plot_spline_overlay(args$spline, args$doy_start, args$doy_end,
+                          highlight = args$highlight,
+                          chpt = args$chpt, gold = args$gold,
+                          gold_label = if (is.null(g)) "gold standard" else
+                            names(run()$gold_choices)[run()$gold_choices == g],
+                          main = paste0(args$main, "\nspline fits, all displayed years"))
     }
   )
 }
